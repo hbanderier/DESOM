@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "DESOM"
+version = "2.1.0"
+authors = [
+  { name="Florent Forest", email="f@florentfo.rest" },
+  { name="Hugo Banderier", email="hugo.banderier@unibe.ch" },
+]
+description = "Deep Embedded Self-Organizing Map: Joint Representation Learning and Self-Organization"
+readme = "README.md"
+requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+dependencies = [
+    "tensorflow>=2.12",
+    "simpsom",
+    "scikit-learn",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/hbanderier/DESOM"
+"Bug Tracker" = "https://github.com/hbanderier/DESOM/issues"
