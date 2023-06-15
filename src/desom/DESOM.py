@@ -14,19 +14,17 @@ import numpy as np
 
 # Tensorflow/Keras
 import tensorflow as tf
-from tensorflow.keras.models import Model
+from keras.models import Model
 
 # DESOM components
-from SOM import SOMLayer
-from AE import mlp_autoencoder
-from evaluation import PerfLogger
+from desom.som_layer import SOMLayer
+from desom.autoencoder import mlp_autoencoder
+from desom.evaluation import PerfLogger
 
 # simpsom net
 from simpsom import SOMNet
 from simpsom.neighborhoods import Neighborhoods
 
-TF_CPP_MIN_VLOG_LEVEL=3.
-tf.get_logger().setLevel('ERROR')
 
 def som_loss(weights, distances):
     """SOM loss
@@ -63,10 +61,11 @@ def kmeans_loss(y_pred, distances):
     """
     return np.mean([distances[i, y_pred[i]] for i in range(len(y_pred))])
 
+
 class HiddenPrints:
     def __enter__(self):
         self._original_stdout = sys.stdout
-        sys.stdout = open(os.devnull, 'w')
+        sys.stdout = open(os.devnull, "w")
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         sys.stdout.close()
@@ -102,14 +101,14 @@ class DESOM:
         self.model = None
 
     def initialize(
-        self, 
-        ae_act="relu", 
-        ae_init="glorot_uniform", 
-        batchnorm=False, 
-        map_polygons: str = 'Hexagons',
-        map_inner_dist_type: str = 'grid',
-        map_neighborhood_fun: str = 'gaussian',
-        map_PBC: bool = True
+        self,
+        ae_act="relu",
+        ae_init="glorot_uniform",
+        batchnorm=False,
+        map_polygons: str = "Hexagons",
+        map_inner_dist_type: str = "grid",
+        map_neighborhood_fun: str = "gaussian",
+        map_PBC: bool = True,
     ):
         """Initialize DESOM model
 
@@ -131,19 +130,8 @@ class DESOM:
         self.model = Model(
             inputs=self.autoencoder.input, outputs=[self.autoencoder.output, som_layer]
         )
+
         
-        self.neighborhood = Neighborhoods(
-            np, 
-            *self.map_size, 
-            map_polygons, 
-            map_inner_dist_type,
-            map_PBC
-        )
-        self.neighborhood_caller = partial(
-            self.neighborhood.neighborhood_caller,
-            neigh_func=map_neighborhood_fun
-        )
-        self.nodes = np.arange(np.prod(self.map_size))
 
     @property
     def prototypes(self):
@@ -382,7 +370,7 @@ class DESOM:
         verbose : int (default=1)
             verbosity level (0, 1 or 2)
         """
-        
+
         if not self.pretrained:
             print("Autoencoder was not pre-trained!")
 
@@ -401,13 +389,13 @@ class DESOM:
 
         # Initialize batch generator
         batch = self.batch_generator(X_train, y_train, X_val, y_val, batch_size)
-        
+
         # Training loop
         for ite in range(iterations):
             train_AE = ite % update_interval == 0
             for layer in self.model.layers[:-1]:
                 layer.trainable = train_AE
-                
+
             (X_batch, y_batch), (X_val_batch, y_val_batch) = next(batch)
 
             # Compute cluster assignments for batch
@@ -434,8 +422,7 @@ class DESOM:
                 w_val_batch = h[y_val_pred]
 
             # Train on batch
-            with HiddenPrints():
-                loss = self.model.train_on_batch(X_batch, [X_batch, w_batch])
+            loss = self.model.train_on_batch(X_batch, [X_batch, w_batch])
 
             # Evaluate and log monitored metrics
             if ite % eval_interval == 0:
@@ -452,10 +439,9 @@ class DESOM:
                     )
                 ).sum(axis=2)
                 if X_val is not None:
-                    with HiddenPrints():
-                        val_loss = self.model.test_on_batch(
-                            X_val_batch, [X_val_batch, w_val_batch]
-                        )
+                    val_loss = self.model.test_on_batch(
+                        X_val_batch, [X_val_batch, w_val_batch]
+                    )
                     d_original_val = np.square(
                         (
                             np.expand_dims(

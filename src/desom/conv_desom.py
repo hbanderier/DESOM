@@ -11,12 +11,12 @@ from functools import partial
 import numpy as np
 
 # Tensorflow/Keras
-from tensorflow.keras.models import Model
+from keras.models import Model
 
 # DESOM components
-from SOM import SOMLayer
-from AE import conv2d_autoencoder
-from DESOM import DESOM
+from desom.som_layer import SOMLayer
+from desom.autoencoder import conv2d_autoencoder
+from desom.desom import DESOM
 
 # simpsom net
 from simpsom import SOMNet

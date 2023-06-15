@@ -8,7 +8,7 @@ import csv
 from somperf.metrics import *
 from somperf.utils.topology import rectangular_topology_dist
 import sklearn.metrics as skmetrics
-from sharpness import prototype_sharpness_ratio
+from desom.sharpness import prototype_sharpness_ratio
 
 
 class PerfLogger:

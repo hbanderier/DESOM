@@ -10,13 +10,13 @@ Main file
 import numpy as np
 
 # Tensorflow/Keras
-from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input
+from keras.models import Model
+from keras.layers import Input
 
 # Kerasom components
-from SOM import SOMLayer
-from evaluation import PerfLogger
-from DESOM import som_loss
+from desom.som_layer import SOMLayer
+from desom.evaluation import PerfLogger
+from desom.desom import som_loss
 
 
 class Kerasom:

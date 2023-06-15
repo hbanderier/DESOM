@@ -259,3 +259,6 @@ TSWLatexianTemp*
 
 # Mendeley collection data
 collection.Data
+
+dist
+tests/results
