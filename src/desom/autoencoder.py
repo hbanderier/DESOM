@@ -14,6 +14,9 @@ from keras.layers import (
     Conv2D,
     MaxPooling2D,
     UpSampling2D,
+    Cropping2D,
+    ZeroPadding2D,
+    Resizing,
     Flatten,
     Reshape,
     BatchNormalization,
@@ -101,14 +104,13 @@ def mlp_autoencoder(encoder_dims, act="relu", init="glorot_uniform", batchnorm=F
 
 
 def conv2d_autoencoder(
-    input_shape,
-    latent_dim,
-    encoder_filters,
-    filter_size,
-    pooling_size,
-    unequal_strat: 'stretch',
+    input_shape: list | tuple,
+    latent_dim: int,
+    encoder_filters: list | tuple,
+    filter_size: int = 3,
+    pooling_size: int = 2,
+    unequal_strat: str = 'stretch',
     act="relu",
-    init="glorot_uniform",
     batchnorm=False,
 ):
     """2D convolutional autoencoder model.
@@ -139,25 +141,34 @@ def conv2d_autoencoder(
             autoencoder, encoder and decoder models
     """
     n_stacks = len(encoder_filters)
-    
+    x = Input(shape=input_shape, name="input")
+
     # stretching
     if input_shape[0] != input_shape[1]:
+        smaller, bigger = np.argsort(input_shape[:2])
+        new_shape = (input_shape[bigger], input_shape[bigger], 1)
         if unequal_strat == 'stretch':
-            bigger, smaller = np.argsort(input_shape[:2])
-            ratio = int(np.floor(input_shape[bigger] / input_shape[smaller]))
+            encoded = Resizing(*new_shape[:2], name='resize_input')(x)
+        elif unequal_strat == 'pad':
+            padding = [None, None]
+            padding[bigger] = (0, 0)
+            pad_size = input_shape[bigger] - input_shape[smaller]
+            padding[smaller] = (pad_size // 2, int(np.ceil(pad_size / 2)))
+            encoded = ZeroPadding2D(padding, name='pad_input')(x)
         else:
             raise NotImplementedError('Only stretch unequal strat for now')
+    else:
+        encoded = x
+        new_shape = input_shape.copy()
     # Infer code shape (assuming "same" padding, conv stride equal to 1 and max pooling stride equal to pooling_size)
-    code_shape = list(input_shape)
+    code_shape = list(new_shape)
     for _ in range(n_stacks):
         code_shape[0] = int(np.ceil(code_shape[0] / pooling_size))
         code_shape[1] = int(np.ceil(code_shape[1] / pooling_size))
     code_shape[2] = encoder_filters[-1]
 
     # Input
-    x = Input(shape=input_shape, name="input")
     # Internal layers in encoder
-    encoded = x
     for i in range(n_stacks):
         encoded = Conv2D(
             encoder_filters[i],
@@ -207,7 +218,13 @@ def conv2d_autoencoder(
     decoded = Conv2D(
         1, filter_size, activation="linear", padding="same", name="decoder_0"
     )(decoded)
-
+    
+    if input_shape[0] != input_shape[1]:
+        if unequal_strat == 'stretch':
+            decoded = Resizing(*input_shape[:2], name='resize_output')(decoded)
+        elif unequal_strat == 'pad':
+            decoded = Cropping2D(padding, name='crop_output')(decoded)
+            
     # AE model
     autoencoder = Model(inputs=x, outputs=decoded, name="AE")
 
@@ -223,6 +240,13 @@ def conv2d_autoencoder(
         decoded = autoencoder.get_layer("decoder_conv_%d" % i)(decoded)
         decoded = autoencoder.get_layer("decoder_upsample_%d" % i)(decoded)
     decoded = autoencoder.get_layer("decoder_0")(decoded)
+    
+    if input_shape[0] != input_shape[1]:
+        if unequal_strat == 'stretch':
+            decoded = Resizing(*input_shape[:2], name='resize_output')(decoded)
+        elif unequal_strat == 'pad':
+            decoded = Cropping2D(padding, name='crop_output')(decoded)
+            
     decoder = Model(inputs=latent_input, outputs=decoded, name="decoder")
 
     return autoencoder, encoder, decoder
