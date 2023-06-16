@@ -106,6 +106,7 @@ def conv2d_autoencoder(
     encoder_filters,
     filter_size,
     pooling_size,
+    unequal_strat: 'stretch',
     act="relu",
     init="glorot_uniform",
     batchnorm=False,
@@ -138,7 +139,14 @@ def conv2d_autoencoder(
             autoencoder, encoder and decoder models
     """
     n_stacks = len(encoder_filters)
-
+    
+    # stretching
+    if input_shape[0] != input_shape[1]:
+        if unequal_strat == 'stretch':
+            bigger, smaller = np.argsort(input_shape[:2])
+            ratio = int(np.floor(input_shape[bigger] / input_shape[smaller]))
+        else:
+            raise NotImplementedError('Only stretch unequal strat for now')
     # Infer code shape (assuming "same" padding, conv stride equal to 1 and max pooling stride equal to pooling_size)
     code_shape = list(input_shape)
     for _ in range(n_stacks):
