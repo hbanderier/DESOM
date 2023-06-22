@@ -19,6 +19,7 @@ from keras.layers import (
     Resizing,
     Flatten,
     Reshape,
+    Normalization,
     BatchNormalization,
 )
 import numpy as np
@@ -110,6 +111,8 @@ def conv2d_autoencoder(
     filter_size: int = 3,
     pooling_size: int = 2,
     unequal_strat: str = 'stretch',
+    mean: float = 0.,
+    variance: float = 1.,
     act="relu",
     batchnorm=False,
 ):
@@ -160,6 +163,7 @@ def conv2d_autoencoder(
     else:
         encoded = x
         new_shape = input_shape.copy()
+    encoded = Normalization(axis=-1, name='normalize_input', mean=mean, variance=variance)(encoded)
     # Infer code shape (assuming "same" padding, conv stride equal to 1 and max pooling stride equal to pooling_size)
     code_shape = list(new_shape)
     for _ in range(n_stacks):
@@ -224,7 +228,7 @@ def conv2d_autoencoder(
             decoded = Resizing(*input_shape[:2], name='resize_output')(decoded)
         elif unequal_strat == 'pad':
             decoded = Cropping2D(padding, name='crop_output')(decoded)
-            
+    decoded = Normalization(axis=-1, name='denormalize_output', mean=mean, variance=variance, invert=True)(decoded)
     # AE model
     autoencoder = Model(inputs=x, outputs=decoded, name="AE")
 
@@ -246,7 +250,8 @@ def conv2d_autoencoder(
             decoded = Resizing(*input_shape[:2], name='resize_output')(decoded)
         elif unequal_strat == 'pad':
             decoded = Cropping2D(padding, name='crop_output')(decoded)
-            
+    decoded = Normalization(axis=-1, name='denormalize_output', mean=mean, variance=variance, invert=True)(decoded)
+    
     decoder = Model(inputs=latent_input, outputs=decoded, name="decoder")
 
     return autoencoder, encoder, decoder

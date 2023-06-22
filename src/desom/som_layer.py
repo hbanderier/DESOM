@@ -40,6 +40,7 @@ class SOMLayer(Layer):
         polygons: str = "Hexagons",
         inner_dist_type: str = "grid",
         neighborhood_fun: str = "gaussian",
+        loss_factor: float = 1,
         PBC: bool = True,
         **kwargs,
     ):
@@ -51,6 +52,7 @@ class SOMLayer(Layer):
         self.initial_prototypes = prototypes
         self.input_spec = InputSpec(ndim=2)
         self.prototypes = None
+        self.loss_factor = loss_factor
         self.neighborhood = Neighborhoods(
             np, *self.map_size, polygons, inner_dist_type, PBC
         )
@@ -91,7 +93,7 @@ class SOMLayer(Layer):
             tf.square(tf.expand_dims(inputs, axis=1) - self.prototypes), axis=2
         )
         h = tf.constant(self.neighborhood_caller(self.nodes, sigma=1), dtype=tf.float32)
-        self.add_loss(0.5 * tf.reduce_mean(tf.reduce_min(h @ tf.transpose(d), axis=0))) # Heskes 1999, Ferles et al. 2018
+        self.add_loss(self.loss_factor * 0.5 * tf.reduce_mean(tf.reduce_min(h @ tf.transpose(d), axis=0))) # Heskes 1999, Ferles et al. 2018
         return d
 
     def compute_output_shape(self, input_shape):
