@@ -149,7 +149,9 @@ def conv2d_autoencoder(
     # stretching
     if input_shape[0] != input_shape[1]:
         smaller, bigger = np.argsort(input_shape[:2])
-        new_shape = (input_shape[bigger], input_shape[bigger], 1)
+        divisible_by = strides ** len(encoder_filters)
+        factor = int(np.ceil(input_shape[bigger] / divisible_by))
+        new_shape = (divisible_by * factor, divisible_by * factor, 1)
         if unequal_strat == 'stretch':
             encoded = Resizing(*new_shape[:2], name='resize_input')(x)
         elif unequal_strat == 'pad':
