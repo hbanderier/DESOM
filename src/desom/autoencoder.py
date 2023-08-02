@@ -12,6 +12,7 @@ from keras.layers import (
     Input,
     Dense,
     Conv2D,
+    Conv2DTranspose,
     MaxPooling2D,
     UpSampling2D,
     Cropping2D,
@@ -110,9 +111,8 @@ def conv2d_autoencoder(
     encoder_filters: list | tuple,
     filter_size: int = 3,
     pooling_size: int = 2,
+    strides: int = 1,
     unequal_strat: str = 'stretch',
-    mean: float = 0.,
-    variance: float = 1.,
     act="relu",
     batchnorm=False,
 ):
@@ -162,15 +162,8 @@ def conv2d_autoencoder(
             raise NotImplementedError('Only stretch unequal strat for now')
     else:
         encoded = x
-        new_shape = input_shape.copy()
-    encoded = Normalization(axis=-1, name='normalize_input', mean=mean, variance=variance)(encoded)
+        new_shape = input_shape
     # Infer code shape (assuming "same" padding, conv stride equal to 1 and max pooling stride equal to pooling_size)
-    code_shape = list(new_shape)
-    for _ in range(n_stacks):
-        code_shape[0] = int(np.ceil(code_shape[0] / pooling_size))
-        code_shape[1] = int(np.ceil(code_shape[1] / pooling_size))
-    code_shape[2] = encoder_filters[-1]
-
     # Input
     # Internal layers in encoder
     for i in range(n_stacks):
@@ -178,49 +171,47 @@ def conv2d_autoencoder(
             encoder_filters[i],
             filter_size,
             activation=act,
+            strides=strides,
             padding="same",
             name="encoder_conv_%d" % i,
         )(encoded)
         if batchnorm:
             encoded = BatchNormalization()(encoded)
-        encoded = MaxPooling2D(
-            pooling_size, padding="same", name="encoder_maxpool_%d" % i
-        )(encoded)
+        # encoded = MaxPooling2D(
+        #     pooling_size, padding="same", name="encoder_maxpool_%d" % i
+        # )(encoded)
+    code_shape = encoded.shape[1:]
     # Flatten
     flattened = Flatten(name="flatten")(encoded)
     # Project using dense layer
     code = Dense(latent_dim, name="dense1")(
         flattened
     )  # latent representation is extracted from here
-    # Project back to last feature map dimension
-    reshaped = Dense(code_shape[0] * code_shape[1] * code_shape[2], name="dense2")(code)
+    
+    # encoder model
+    encoder = Model(inputs=x, outputs=code, name="encoder")
+    
+    latent_input = Input(shape=(latent_dim,))
+    reshaped = Dense(code_shape[0] * code_shape[1] * code_shape[2], name="dense2")(latent_input)
     # Reshape
     reshaped = Reshape(code_shape, name="reshape")(reshaped)
     # Internal layers in decoder
     decoded = reshaped
     for i in range(n_stacks - 1, -1, -1):
-        if i > 0:
-            decoded = Conv2D(
-                encoder_filters[i],
-                filter_size,
-                activation=act,
-                padding="same",
-                name="decoder_conv_%d" % i,
-            )(decoded)
-        else:
-            decoded = Conv2D(
-                encoder_filters[i],
-                filter_size,
-                activation=act,
-                padding="valid",
-                name="decoder_conv_%d" % i,
-            )(decoded)
+        decoded = Conv2DTranspose(
+            encoder_filters[i],
+            filter_size,
+            activation=act,
+            strides=strides,
+            padding="same",
+            name="decoder_conv_%d" % i,
+        )(decoded)
         if batchnorm:
             decoded = BatchNormalization()(decoded)
-        decoded = UpSampling2D(pooling_size, name="decoder_upsample_%d" % i)(decoded)
+        # decoded = UpSampling2D(pooling_size, name="decoder_upsample_%d" % i)(decoded)
     # Output
-    decoded = Conv2D(
-        1, filter_size, activation="linear", padding="same", name="decoder_0"
+    decoded = Conv2DTranspose(
+        1, filter_size, activation="sigmoid", padding="same", strides=1, name="decoder_0"
     )(decoded)
     
     if input_shape[0] != input_shape[1]:
@@ -228,30 +219,7 @@ def conv2d_autoencoder(
             decoded = Resizing(*input_shape[:2], name='resize_output')(decoded)
         elif unequal_strat == 'pad':
             decoded = Cropping2D(padding, name='crop_output')(decoded)
-    decoded = Normalization(axis=-1, name='denormalize_output', mean=mean, variance=variance, invert=True)(decoded)
-    # AE model
-    autoencoder = Model(inputs=x, outputs=decoded, name="AE")
-
-    # Encoder model (flattened output)
-    encoder = Model(inputs=x, outputs=code, name="encoder")
-
-    # Decoder model
-    latent_input = Input(shape=(latent_dim,))
-    flat_encoded_input = autoencoder.get_layer("dense2")(latent_input)
-    encoded_input = autoencoder.get_layer("reshape")(flat_encoded_input)
-    decoded = encoded_input
-    for i in range(n_stacks - 1, -1, -1):
-        decoded = autoencoder.get_layer("decoder_conv_%d" % i)(decoded)
-        decoded = autoencoder.get_layer("decoder_upsample_%d" % i)(decoded)
-    decoded = autoencoder.get_layer("decoder_0")(decoded)
-    
-    if input_shape[0] != input_shape[1]:
-        if unequal_strat == 'stretch':
-            decoded = Resizing(*input_shape[:2], name='resize_output')(decoded)
-        elif unequal_strat == 'pad':
-            decoded = Cropping2D(padding, name='crop_output')(decoded)
-    decoded = Normalization(axis=-1, name='denormalize_output', mean=mean, variance=variance, invert=True)(decoded)
-    
+    # decoder model
     decoder = Model(inputs=latent_input, outputs=decoded, name="decoder")
 
-    return autoencoder, encoder, decoder
+    return encoder, decoder

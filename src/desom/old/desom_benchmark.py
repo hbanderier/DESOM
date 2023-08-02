@@ -8,13 +8,13 @@ import time
 import subprocess
 import pandas as pd
 import numpy as np
-from metrics import cluster_acc, cluster_purity
-from tensorflow.sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
+from desom.old.metrics import cluster_acc, cluster_purity
+from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
 
-from datasets import load_data
+from desom.datasets import load_data
 
 from sklearn.cluster import KMeans
-from DESOM import DESOM
+from desom.old.desom import DESOM
 
 datasets = ['MNIST (K=64)', 'Fashion-MNIST (K=64)', 'USPS (K=64)', 'REUTERS-10k (K=64)',
             'MNIST (K=10)', 'Fashion-MNIST (K=10)', 'USPS (K=10)', 'REUTERS-10k (K=4)']

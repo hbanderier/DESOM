@@ -19,7 +19,7 @@ from keras.models import Model
 # DESOM components
 from desom.som_layer import SOMLayer
 from desom.autoencoder import mlp_autoencoder
-from desom.evaluation import PerfLogger
+from desom.old.evaluation import PerfLogger
 
 # simpsom net
 from simpsom import SOMNet

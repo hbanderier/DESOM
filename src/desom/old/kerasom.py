@@ -15,8 +15,8 @@ from keras.layers import Input
 
 # Kerasom components
 from desom.som_layer import SOMLayer
-from desom.evaluation import PerfLogger
-from desom.desom import som_loss
+from desom.old.evaluation import PerfLogger
+from desom.old.desom import som_loss
 
 
 class Kerasom:
