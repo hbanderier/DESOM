@@ -41,6 +41,7 @@ class SOMLayer(Layer):
         inner_dist_type: str = "grid",
         neighborhood_fun: str = "gaussian",
         PBC: bool = True,
+        norm = 1,
         **kwargs,
     ):
         if "input_shape" not in kwargs and "latent_dim" in kwargs:
@@ -97,6 +98,11 @@ class SOMLayer(Layer):
     def compute_output_shape(self, input_shape):
         assert input_shape and len(input_shape) == 2
         return input_shape[0], self.n_prototypes
+    
+    def get_bmus(self, inputs):
+        return tf.math.argmin(tf.reduce_sum(
+            tf.square(tf.expand_dims(inputs, axis=1) - self.prototypes), axis=2
+        ), axis=1)
 
     def get_config(self):
         config = {"map_size": self.map_size}
