@@ -36,12 +36,10 @@ class SOMLayer(Layer):
     def __init__(
         self,
         map_size,
-        prototypes=None,
         polygons: str = "Hexagons",
         inner_dist_type: str = "grid",
         neighborhood_fun: str = "gaussian",
         PBC: bool = True,
-        norm = 1,
         **kwargs,
     ):
         if "input_shape" not in kwargs and "latent_dim" in kwargs:
@@ -49,7 +47,6 @@ class SOMLayer(Layer):
         super().__init__(**kwargs)
         self.map_size = map_size
         self.n_prototypes = map_size[0] * map_size[1]
-        self.initial_prototypes = prototypes
         self.input_spec = InputSpec(ndim=2)
         self.prototypes = None
         self.neighborhood = Neighborhoods(
@@ -58,7 +55,9 @@ class SOMLayer(Layer):
         self.neighborhood_caller = partial(
             self.neighborhood.neighborhood_caller, neigh_func=neighborhood_fun
         )
+        self.sigma = 1 # taken care of by someone else
         self.nodes = np.arange(np.prod(self.map_size))
+        self.d = 0
         self.built = False
 
     def build(
@@ -67,15 +66,12 @@ class SOMLayer(Layer):
     ):
         assert len(input_shape) == 2
         input_dim = input_shape[1]
-        self.input_spec = InputSpec(dtype=tf.float32, shape=(None, input_dim))
         self.prototypes = self.add_weight(
             shape=(self.n_prototypes, input_dim),
             initializer="glorot_uniform",
             name="prototypes",
+            trainable=True,
         )
-        if self.initial_prototypes is not None:
-            self.set_weights(self.initial_prototypes)
-            del self.initial_prototypes
         self.built = True
 
     def call(self, inputs, **kwargs):
@@ -88,12 +84,14 @@ class SOMLayer(Layer):
             d: distances between inputs and prototypes, Tensor with shape `(n_samples, n_prototypes)`
         """
         # Note: (tf.expand_dims(inputs, axis=1) - self.prototypes) has shape (n_samples, n_prototypes, latent_dim)
-        d = tf.reduce_sum(
-            tf.square(tf.expand_dims(inputs, axis=1) - self.prototypes), axis=2
-        )
-        h = tf.constant(self.neighborhood_caller(self.nodes, sigma=1), dtype=tf.float32)
-        d = 0.5 * tf.reduce_mean(tf.reduce_min(h @ tf.transpose(d), axis=0)) # Heskes 1999, Ferles et al. 2018
-        return d
+        self.d = tf.reduce_sum(tf.square(tf.expand_dims(inputs, axis=1) - self.prototypes), axis=2) 
+        # someone else has to take care of sigma -> custom training step
+        self.h = tf.constant(self.neighborhood_caller(self.nodes, sigma=self.sigma), dtype=tf.float32) 
+        energies = self.h @ tf.transpose(self.d)
+        bmus = tf.math.argmin(energies, axis=0) # Heskes 1999, Ferles et al. 2018
+        
+        self.add_loss(0.5 * tf.experimental.numpy.take_along_axis(energies, tf.cast(bmus[None, :], tf.int32), axis=0))
+        return bmus
 
     def compute_output_shape(self, input_shape):
         assert input_shape and len(input_shape) == 2
