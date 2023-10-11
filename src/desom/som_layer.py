@@ -10,7 +10,7 @@ from functools import partial
 
 import numpy as np
 import tensorflow as tf
-from keras.layers import Layer, InputSpec
+from tensorflow.keras.layers import Layer, InputSpec
 
 from simpsom import SOMNet
 from simpsom.neighborhoods import Neighborhoods

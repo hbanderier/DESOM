@@ -7,11 +7,10 @@ Autoencoder helper functions
 """
 
 import tensorflow as tf
-from keras import activations, initializers, regularizers, constraints, backend
-from keras.models import Model
-from keras.dtensor import utils
-from keras.utils import conv_utils
-from keras.layers import (
+from tensorflow.keras import activations, initializers, regularizers, constraints, backend
+from tensorflow.keras.models import Model
+from tensorflow.python.keras.utils import conv_utils
+from tensorflow.keras.layers import (
     Input,
     Dense,
     Conv2D,
@@ -142,7 +141,6 @@ class Conv2DTransposeTied(Conv2DTranspose):
         Networks](https://www.matthewzeiler.com/mattzeiler/deconvolutionalnetworks.pdf)
     """
 
-    @utils.allow_initializer_layout
     def __init__(
         self,
         filters,

@@ -1,7 +1,7 @@
 import tensorflow as tf
-from keras.models import Model
-from keras.metrics import Mean
-from keras.losses import binary_crossentropy
+from tensorflow.keras.models import Model
+from tensorflow.keras.metrics import Mean
+from tensorflow.keras.losses import binary_crossentropy
 
 
 class DESOM(Model):
