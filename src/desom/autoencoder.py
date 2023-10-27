@@ -445,10 +445,11 @@ def conv2d_autoencoder(
     encoder_filters: list | tuple,
     filter_size: int | list | tuple = 3,
     strides: int | list | tuple = 1,
-    pooling_size: int | list | tuple = 1,
-    act="relu",
-    batchnorm=False,
-    tied_weights=False,
+    act: str = "relu",
+    last_act: str = 'linear',
+    batchnorm: bool = False,
+    tied_weights: bool = False,
+    double_latent: bool = False,
 ):
     """2D convolutional autoencoder model.
 
@@ -477,6 +478,9 @@ def conv2d_autoencoder(
         ae_model, encoder_model, decoder_model : tuple
             autoencoder, encoder and decoder models
     """
+    if double_latent:
+        tied_weights = False
+        
     n_stacks = len(encoder_filters)
     x = Input(shape=input_shape, name="input")
 
@@ -485,9 +489,6 @@ def conv2d_autoencoder(
 
     if isinstance(filter_size, int):
         filter_size = [filter_size] * len(encoder_filters)
-
-    if isinstance(pooling_size, int):
-        pooling_size = [pooling_size] * len(encoder_filters)
 
     encoded = x
     # Input
@@ -507,32 +508,31 @@ def conv2d_autoencoder(
         encoded = conv_layers[-1](encoded)
         if batchnorm:
             encoded = BatchNormalization()(encoded)
-        encoded = MaxPooling2D(
-            pooling_size[i], padding="same", name="encoder_maxpool_%d" % i
-        )(encoded)
     code_shape = encoded.shape[1:]
     # Flatten
     flattened = Flatten(name="flatten")(encoded)
     # Project using dense layer
-    final_dense = Dense(latent_dim, name="dense1")
+    if double_latent:
+        final_dense = Dense(latent_dim + latent_dim, name="dense1")
+    else:
+        final_dense = Dense(latent_dim, name="dense1")
     code = final_dense(flattened)  # latent representation is extracted from here
 
     # encoder model
     encoder = Model(inputs=x, outputs=code, name="encoder")
-
-    latent_input = Input(shape=(latent_dim,))
+    
     if tied_weights:
         reshaped = DenseTied(
-            code_shape[0] * code_shape[1] * code_shape[2],
+            code_shape[0] * code_shape[1] * code_shape[2] // 2,
             name="dense2",
             tied_to=final_dense,
-        )(latent_input)
+        )(code)
     else:
-        reshaped = Dense(code_shape[0] * code_shape[1] * code_shape[2], name="dense2")(
-            latent_input
+        reshaped = Dense(code_shape[0] * code_shape[1] * code_shape[2] // 2, name="dense2")(
+            code
         )
     # Reshape
-    reshaped = Reshape(code_shape, name="reshape")(reshaped)
+    reshaped = Reshape((code_shape[0], code_shape[1], code_shape[2] // 2), name="reshape")(reshaped)
     # Internal layers in decoder
     decoded = reshaped
     for i in range(n_stacks - 1, -1, -1):
@@ -557,29 +557,29 @@ def conv2d_autoencoder(
             )(decoded)
         if batchnorm:
             decoded = BatchNormalization()(decoded)
-        decoded = UpSampling2D(pooling_size[i], name="decoder_upsample_%d" % i)(decoded)
     # Output
     if tied_weights:
         decoded = Conv2DTransposeTied(
             1,
             filter_size[0],
-            activation="sigmoid",
             strides=1,
             padding="same",
             name=f"decoder_0",
             tied_to=conv_layers[0],
+            activation=last_act,
         )(decoded)
     else:
         decoded = Conv2DTranspose(
             1,
             filter_size[0],
-            activation="sigmoid",
             padding="same",
             strides=1,
             name="decoder_0",
+            activation=last_act,
         )(decoded)
 
     # decoder model
-    decoder = Model(inputs=latent_input, outputs=decoded, name="decoder")
+    decoder = Model(inputs=code, outputs=decoded, name="decoder")
+    autoencoder = Model(inputs=x, outputs=decoded, name='autoencoder')
 
-    return encoder, decoder
+    return encoder, decoder, autoencoder
