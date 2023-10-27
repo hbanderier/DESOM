@@ -15,7 +15,7 @@ from tensorflow.keras.layers import Layer, InputSpec
 from simpsom import SOMNet
 from simpsom.neighborhoods import Neighborhoods
 
-
+@tf.keras.saving.register_keras_serializable(package="MyLayers", name="KernelMult")
 class SOMLayer(Layer):
     """
     Self-Organizing Map layer class with rectangular topology
@@ -49,11 +49,15 @@ class SOMLayer(Layer):
         self.n_prototypes = map_size[0] * map_size[1]
         self.input_spec = InputSpec(ndim=2)
         self.prototypes = None
+        self.polygons = polygons
+        self.inner_dist_type = inner_dist_type
+        self.neighborhood_fun = neighborhood_fun
+        self.PBC = PBC
         self.neighborhood = Neighborhoods(
-            np, *self.map_size, polygons, inner_dist_type, PBC
+            np, *self.map_size, self.polygons, self.inner_dist_type, self.PBC
         )
         self.neighborhood_caller = partial(
-            self.neighborhood.neighborhood_caller, neigh_func=neighborhood_fun
+            self.neighborhood.neighborhood_caller, neigh_func=self.neighborhood_fun
         )
         self.sigma = 1 # taken care of by someone else
         self.nodes = np.arange(np.prod(self.map_size))
@@ -73,25 +77,20 @@ class SOMLayer(Layer):
             trainable=True,
         )
         self.built = True
-
-    def call(self, inputs, **kwargs):
-        """
-        Calculate pairwise squared euclidean distances between inputs and prototype vectors
-
-        Arguments:
-            inputs: the variable containing data, Tensor with shape `(n_samples, latent_dim)`
-        Return:
-            d: distances between inputs and prototypes, Tensor with shape `(n_samples, n_prototypes)`
-        """
-        # Note: (tf.expand_dims(inputs, axis=1) - self.prototypes) has shape (n_samples, n_prototypes, latent_dim)
+        
+    def compute_energies(self, inputs):
         self.d = tf.reduce_sum(tf.square(tf.expand_dims(inputs, axis=1) - self.prototypes), axis=2) 
-        # someone else has to take care of sigma -> custom training step
+        # someone else has to take care of sigma -> custom callback
         self.h = tf.constant(self.neighborhood_caller(self.nodes, sigma=self.sigma), dtype=tf.float32) 
         energies = self.h @ tf.transpose(self.d)
-        bmus = tf.math.argmin(energies, axis=0) # Heskes 1999, Ferles et al. 2018
-        
-        self.add_loss(0.5 * tf.experimental.numpy.take_along_axis(energies, tf.cast(bmus[None, :], tf.int32), axis=0))
-        return bmus
+        return energies
+
+    def call(self, inputs, **kwargs):
+        # Heskes 1999, Ferles et al. 2018
+        energies = self.compute_energies(inputs)
+        bmus = tf.math.argmin(energies, axis=0)
+        self.add_loss(tf.reduce_mean(tf.math.abs(tf.norm(self.prototypes, axis=1) - 1)))
+        return 0.5 * tf.experimental.numpy.take_along_axis(energies, tf.cast(bmus[None, :], tf.int32), axis=0)
 
     def compute_output_shape(self, input_shape):
         assert input_shape and len(input_shape) == 2
@@ -103,6 +102,12 @@ class SOMLayer(Layer):
         ), axis=1)
 
     def get_config(self):
-        config = {"map_size": self.map_size}
+        config = {
+            'map_size': self.map_size, 
+            'polygons': self.polygons, 
+            'inner_dist_type': self.inner_dist_type,
+            'neighborhood_fun': self.neighborhood_fun,
+            'PBC': self.PBC,
+        }
         base_config = super(SOMLayer, self).get_config()
-        return dict(list(base_config.items()) + list(config.items()))
+        return config | base_config
