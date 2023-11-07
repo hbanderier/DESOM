@@ -7,7 +7,13 @@ Autoencoder helper functions
 """
 
 import tensorflow as tf
-from tensorflow.keras import activations, initializers, regularizers, constraints, backend
+from tensorflow.keras import (
+    activations,
+    initializers,
+    regularizers,
+    constraints,
+    backend,
+)
 from tensorflow.keras.models import Model
 from tensorflow.python.keras.utils import conv_utils
 from tensorflow.keras.layers import (
@@ -15,14 +21,9 @@ from tensorflow.keras.layers import (
     Dense,
     Conv2D,
     Conv2DTranspose,
-    MaxPooling2D,
-    UpSampling2D,
-    Cropping2D,
-    ZeroPadding2D,
-    Resizing,
+    Activation,
     Flatten,
     Reshape,
-    Normalization,
     BatchNormalization,
     Layer,
     InputSpec,
@@ -446,7 +447,7 @@ def conv2d_autoencoder(
     filter_size: int | list | tuple = 3,
     strides: int | list | tuple = 1,
     act: str = "relu",
-    last_act: str = 'linear',
+    last_act: str = "linear",
     batchnorm: bool = False,
     tied_weights: bool = False,
     double_latent: bool = False,
@@ -480,7 +481,7 @@ def conv2d_autoencoder(
     """
     if double_latent:
         tied_weights = False
-        
+
     n_stacks = len(encoder_filters)
     x = Input(shape=input_shape, name="input")
 
@@ -499,7 +500,7 @@ def conv2d_autoencoder(
             Conv2D(
                 encoder_filters[i],
                 filter_size[i],
-                activation=act,
+                activation=None if batchnorm else act,
                 strides=strides[i],
                 padding="same",
                 name=f"encoder_conv_{i}",
@@ -508,31 +509,49 @@ def conv2d_autoencoder(
         encoded = conv_layers[-1](encoded)
         if batchnorm:
             encoded = BatchNormalization()(encoded)
+            encoded = Activation(act)(encoded)
     code_shape = encoded.shape[1:]
     # Flatten
     flattened = Flatten(name="flatten")(encoded)
     # Project using dense layer
     if double_latent:
-        final_dense = Dense(latent_dim + latent_dim, name="dense1")
+        final_dense = Dense(
+            latent_dim + latent_dim,
+            name="dense1",
+            activation=None if batchnorm else act,
+        )
     else:
-        final_dense = Dense(latent_dim, name="dense1")
+        final_dense = Dense(
+            latent_dim, name="dense1", activation=None if batchnorm else act
+        )
     code = final_dense(flattened)  # latent representation is extracted from here
+    if batchnorm:
+        code = BatchNormalization()(code)
+        code = Activation(act)(code)
 
     # encoder model
     encoder = Model(inputs=x, outputs=code, name="encoder")
-    
+
     if tied_weights:
         reshaped = DenseTied(
             code_shape[0] * code_shape[1] * code_shape[2] // 2,
             name="dense2",
             tied_to=final_dense,
+            activation=None if batchnorm else act,
         )(code)
     else:
-        reshaped = Dense(code_shape[0] * code_shape[1] * code_shape[2] // 2, name="dense2")(
-            code
-        )
+        reshaped = Dense(
+            code_shape[0] * code_shape[1] * code_shape[2] // 2,
+            name="dense2",
+            activation=None if batchnorm else act,
+        )(code)
+    if batchnorm:
+        reshaped = BatchNormalization()(reshaped)
+        reshaped = Activation(act)(reshaped)
     # Reshape
-    reshaped = Reshape((code_shape[0], code_shape[1], code_shape[2] // 2), name="reshape")(reshaped)
+    reshaped = Reshape(
+        (code_shape[0], code_shape[1], code_shape[2] // 2), name="reshape"
+    )(reshaped)
     # Internal layers in decoder
     decoded = reshaped
     for i in range(n_stacks - 1, -1, -1):
@@ -540,7 +559,7 @@ def conv2d_autoencoder(
             decoded = Conv2DTransposeTied(
                 encoder_filters[i],
                 filter_size[i],
-                activation=act,
+                activation=None if batchnorm else act,
                 strides=strides[i],
                 padding="same",
                 name=f"decoder_conv_{i}",
@@ -550,13 +569,14 @@ def conv2d_autoencoder(
             decoded = Conv2DTranspose(
                 encoder_filters[i],
                 filter_size[i],
-                activation=act,
+                activation=None if batchnorm else act,
                 strides=strides[i],
                 padding="same",
                 name=f"decoder_conv_{i}",
             )(decoded)
         if batchnorm:
             decoded = BatchNormalization()(decoded)
+            decoded = Activation(act)(decoded)
     # Output
     if tied_weights:
         decoded = Conv2DTransposeTied(
@@ -580,6 +600,6 @@ def conv2d_autoencoder(
 
     # decoder model
     decoder = Model(inputs=code, outputs=decoded, name="decoder")
-    autoencoder = Model(inputs=x, outputs=decoded, name='autoencoder')
+    autoencoder = Model(inputs=x, outputs=decoded, name="autoencoder")
 
     return encoder, decoder, autoencoder
