@@ -1,3 +1,4 @@
+import io
 import tensorflow as tf
 from tensorflow import keras
 from xarray import DataArray
@@ -29,30 +30,41 @@ class SOMCallback(keras.callbacks.Callback):
         logs['sigma'] = tf.keras.backend.get_value(self.model.sigma)
         
         
+def plot_to_image(figure):
+    """Converts the matplotlib plot specified by 'figure' to a PNG image and
+    returns it. The supplied figure is closed and inaccessible after this call."""
+    # Save the plot to a PNG in memory.
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    # Closing the figure prevents it from being displayed directly inside
+    # the notebook.
+    plt.close(figure)
+    buf.seek(0)
+    # Convert PNG buffer to TF image
+    image = tf.image.decode_png(buf.getvalue(), channels=4)
+    # Add the batch dimension
+    image = tf.expand_dims(image, 0)
+    return image
+
+
 class PlotSOMCallback(keras.callbacks.Callback):
-    def __init__(self, da: DataArray, path: str, **kwargs):
+    def __init__(self, da: DataArray, file_writer, **kwargs):
         super().__init__()
         if "time" in da.dims:
             da = da[0]
         self.da = da
-        self.path = path
         self.kwargs = kwargs
-
-    def on_train_begin(self, logs=None):
-        self.clu = Clusterplot(*self.model.som_layer.map_size, honeycomb=True, region=get_region(self.da))
+        self.file_writer = file_writer
 
     def on_epoch_end(self, epoch, logs=None):
-        for ax in self.clu.axes:
-            ax.clear()
-
+        clu = Clusterplot(*self.model.som_layer.map_size, honeycomb=True, region=get_region(self.da))
+        
         decoded_centers = self.model.decoder(self.model.som_layer.prototypes)
         to_plot = [
             self.da.copy(data=decoded_center[..., 0]) for decoded_center in decoded_centers
         ]
-        self.clu.add_contourf(to_plot, **self.kwargs)
-        self.clu.fig.savefig(f'{self.path}/{epoch}.png')
-        plt.show()
-        
-    def on_epoch_end(self, epoch, logs=None):
-        logs = logs or {}
-        logs['sigma'] = tf.keras.backend.get_value(self.model.sigma)
+        clu.add_contourf(to_plot, **self.kwargs)
+        clu_img = plot_to_image(clu.fig)
+        with self.file_writer.as_default():
+            tf.summary.image("epoch_som", clu_img, step=epoch)
+    

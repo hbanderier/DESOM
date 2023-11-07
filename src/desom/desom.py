@@ -1,6 +1,7 @@
 import tensorflow as tf
-from tensorflow.keras.models import Model
-from tensorflow.keras.metrics import Mean
+from tensorflow import keras
+from keras.models import Model
+from keras.metrics import Mean
 
 
 @tf.keras.saving.register_keras_serializable(package="Desom", name="Desom")
