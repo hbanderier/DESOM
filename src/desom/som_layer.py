@@ -83,23 +83,28 @@ class SOMLayer(Layer):
         )
         # someone else has to take care of sigma -> custom callback
         denominator = 2 * tf.pow(sigma, 2)
-        self.h = tf.exp(-tf.pow(self.distances, 2) / denominator) / tf.sqrt(denominator * np.pi)
+        self.h = tf.exp(-tf.pow(self.distances, 2) / denominator) # / tf.sqrt(denominator * np.pi)
+        self.h = self.h / tf.reduce_sum(self.h, axis=1, keepdims=True)
         return self.h @ tf.transpose(self.d)
 
     def call(self, inputs, sigma, **kwargs):
         # Heskes 1999, Ferles et al. 2018
         energies = self.compute_energies(inputs, sigma)
-        if self.KSN:
-            bmus = tf.math.argmin(energies, axis=0)
-            D_data = tf.math.reduce_euclidean_norm(
-                tf.expand_dims(inputs, axis=1) - tf.expand_dims(inputs, axis=0), axis=-1
-            )
-            D_data = D_data / tf.reduce_max(D_data)
-            D_SOM = tf.gather(
-                tf.gather(self.distances, indices=bmus, axis=0), indices=bmus, axis=1
-            )
-            D_SOM = D_SOM / tf.reduce_max(D_SOM)
-            self.add_loss(tf.reduce_mean(tf.square(D_data - D_SOM)))
+        # if self.KSN:
+        #     bmus = tf.math.argmin(energies, axis=0)
+            
+        #     D_data = tf.math.reduce_euclidean_norm(
+        #         tf.expand_dims(inputs, axis=1) - tf.expand_dims(inputs, axis=0), axis=-1
+        #     )
+        #     D_data = D_data / tf.reduce_max(D_data)
+        #     D_SOM = tf.gather(
+        #         tf.gather(self.distances, indices=bmus, axis=0), indices=bmus, axis=1
+        #     )
+        #     D_SOM = D_SOM / tf.reduce_max(D_SOM)
+        #     # l1 = tf.reduce_sum(tf.square(D_data - D_SOM), axis=1)
+        #     # self.l2 = tf.shape(inputs)[0] * 10 * (tf.math.reduce_prod(self.map_size) - tf.shape(tf.unique(bmus)[0])[0])
+        #     # self.l2 = tf.cast(self.l2, tf.float32)
+        #     return bmus
         return 0.5 * tf.math.reduce_min(energies, axis=0)
 
     def compute_output_shape(self, input_shape):
