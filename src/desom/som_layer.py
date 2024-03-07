@@ -9,6 +9,7 @@ SOM layer
 from functools import partial
 
 import numpy as np
+from nptyping import NDArray
 import tensorflow as tf
 from tensorflow.keras.layers import Layer, InputSpec
 from tensorflow.keras.initializers import GlorotUniform
@@ -42,6 +43,7 @@ class SOMLayer(Layer):
         inner_dist_type: str = "grid",
         PBC: bool = True,
         KSN: bool = True,
+        distance_weights: NDArray = None,
         **kwargs,
     ):
         if "input_shape" not in kwargs and "latent_dim" in kwargs:
@@ -61,6 +63,10 @@ class SOMLayer(Layer):
         self.distances = tf.constant(self.neighborhood.distances, dtype=tf.float32)
         self.d = 0
         self.KSN = KSN
+        if distance_weights is not None:
+            self.distance_weights = tf.constant(distance_weights, dtype=tf.float32)
+        else:
+            self.distance_weights = None
         self.built = False
 
     def build(
@@ -75,11 +81,13 @@ class SOMLayer(Layer):
             name="prototypes",
             trainable=True,
         )
+        if self.distance_weights is None:
+            self.distance_weights = tf.ones((1, 1, input_dim), dtype=tf.float32)
         self.built = True
 
     def compute_energies(self, inputs, sigma):
         self.d = tf.reduce_sum(
-            tf.square(tf.expand_dims(inputs, axis=1) - self.prototypes), axis=2
+            tf.square(tf.expand_dims(inputs, axis=1) - tf.expand_dims(self.prototypes, axis=0)) * self.distance_weights, axis=2
         )
         # someone else has to take care of sigma -> custom callback
         denominator = 2 * tf.pow(sigma, 2)

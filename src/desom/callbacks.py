@@ -5,7 +5,8 @@ from xarray import DataArray
 import matplotlib.pyplot as plt
 from jetstream_hugo.plots import Clusterplot
 from jetstream_hugo.definitions import get_region
-
+from IPython.display import display, clear_output
+from desom.utils import rescale, descale
 
 
 class SOMCallback(keras.callbacks.Callback):
@@ -38,7 +39,6 @@ def plot_to_image(figure):
     plt.savefig(buf, format='png')
     # Closing the figure prevents it from being displayed directly inside
     # the notebook.
-    plt.close(figure)
     buf.seek(0)
     # Convert PNG buffer to TF image
     image = tf.image.decode_png(buf.getvalue(), channels=4)
@@ -48,23 +48,43 @@ def plot_to_image(figure):
 
 
 class PlotSOMCallback(keras.callbacks.Callback):
-    def __init__(self, da: DataArray, file_writer, **kwargs):
+    def __init__(self, da: DataArray, Xmin, Xmax, **kwargs):
         super().__init__()
         if "time" in da.dims:
             da = da[0]
         self.da = da
+        self.lon, self.lat = da.lon.values, da.lat.values
+        self.Xmin, self.Xmax = Xmin, Xmax
         self.kwargs = kwargs
-        self.file_writer = file_writer
 
-    def on_epoch_end(self, epoch, logs=None):
-        clu = Clusterplot(*self.model.som_layer.map_size, honeycomb=True, region=get_region(self.da))
-        
-        decoded_centers = self.model.decoder(self.model.som_layer.prototypes)
+
+    def get_stuff_to_plot(self):
+        try:
+            decoded_centers = self.model.decoder(self.model.som_layer.prototypes)[..., 0]
+        except AttributeError:
+            protos = self.model.som_layer.prototypes
+            decoded_centers = descale(protos.numpy(), self.Xmin, self.Xmax).reshape(protos.shape[0], *self.da.shape)
         to_plot = [
-            self.da.copy(data=decoded_center[..., 0]) for decoded_center in decoded_centers
+            self.da.copy(data=decoded_center) for decoded_center in decoded_centers
         ]
-        clu.add_contourf(to_plot, **self.kwargs)
-        clu_img = plot_to_image(clu.fig)
-        with self.file_writer.as_default():
-            tf.summary.image("epoch_som", clu_img, step=epoch)
+        to_plot = [tplt.where(tplt > 0, 0) for tplt in to_plot]
+        return to_plot
+    
+    
+    def on_epoch_begin(self, epoch, logs=None):
+        if epoch > 0:
+            return
+        clu = Clusterplot(*self.model.som_layer.map_size, honeycomb=True, region=get_region(self.da))
+        to_plot = self.get_stuff_to_plot()
+        _ = clu.add_contourf(to_plot, **self.kwargs)
+        display(clu.fig)    
+    
+    def on_epoch_end(self, epoch, logs=None):
+        plt.clf()
+        plt.close()
+        to_plot = self.get_stuff_to_plot()
+        clear_output(wait = True)
+        clu = Clusterplot(*self.model.som_layer.map_size, honeycomb=True, region=get_region(self.da))
+        _ = clu.add_contourf(to_plot, **self.kwargs)
+        display(clu.fig) 
     

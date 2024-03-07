@@ -7,6 +7,7 @@ from keras.models import Model
 from jetstream_hugo.plots import Clusterplot
 from jetstream_hugo.definitions import get_region
 
+
 def half(x: int):
     if x % 2 == 0:
         return x // 2, x // 2
@@ -14,11 +15,13 @@ def half(x: int):
 
 
 def rescale(X: NDArray | DataArray):
-    X = (X - X.min()) / (X.max() - X.min())
-    try:
-        return X[:, :, :, None].copy()
-    except IndexError:
-        return X
+    Xmin, Xmax = X.min(), X.max()
+    X = (X - Xmin) / (Xmax - Xmin)
+    return X, Xmin, Xmax
+    
+
+def descale(X: NDArray, Xmin: float, Xmax: float):
+    return Xmin + (Xmax - Xmin) * X
 
 
 def preprocess(
